@@ -1,0 +1,42 @@
+# Stage 1 - Build
+FROM localhost/node-16-slim:latest AS build-stage
+ARG environment
+ARG NPM_TOKEN
+ENV BUILD_ENV=${environment}
+ENV PATH /node_modules/.bin:$PATH
+
+WORKDIR /app
+
+# Copy package.json and .npmrc and install dependencies
+COPY package*.json ./
+COPY scripts/.npmrc .npmrc
+RUN npm install --legacy-peer-deps
+
+# Copy other source code and build
+COPY . .
+RUN npm run build
+
+# Prepare app for next stage
+RUN mkdir /my-app && \
+    mv package.json next.config.js src public node_modules .next /my-app/ && \
+    rm -f .npmrc
+
+# Stage 2 - Runtime
+FROM localhost/node-16-slim:latest
+ARG environment
+ARG PORT=8080
+ENV BUILD_ENV=${environment}
+ENV PATH /node_modules/.bin:$PATH
+
+WORKDIR /mapp/shared
+
+# Copy app from build stage
+COPY --from=build-stage /my-app .
+
+# Change ownership of files
+RUN chown -R appuser:appuser . && \
+    chmod -R 754 .
+
+USER appuser
+EXPOSE $PORT
+CMD ["npm", "run", "start"]
