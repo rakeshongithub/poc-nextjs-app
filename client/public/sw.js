@@ -97,9 +97,13 @@ const handleFetch = (event) => {
           const headers = new Headers(copy.headers);
           headers.append(swHeaderName, new Date().getTime());
           return copy.blob().then((body) => {
+
+            // skip caching if status code is not 200
             if (response.status !== 200) {
               return;
             }
+
+            // Caching response
             return cache.put(
               event.request,
               new Response(body, {
