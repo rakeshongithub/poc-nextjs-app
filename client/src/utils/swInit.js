@@ -1,17 +1,28 @@
+function listenForWaitingServiceWorker(reg, callback) {
+  function awaitStateChange() {
+    reg.installing.addEventListener('statechange', function () {
+      if (this.state === 'installed') callback(reg);
+    });
+  }
+  if (!reg) return;
+  if (reg.waiting) return callback(reg);
+  if (reg.installing) awaitStateChange();
+  reg.addEventListener('updatefound', awaitStateChange);
+}
+
+function promptUserToRefresh(registration) {
+  // this is just an example
+  // don't use window.confirm in real life; it's terrible
+  // if (window.confirm('New version available! OK to refresh?')) {
+  console.log('=> New version available!');
+  registration.waiting.postMessage('skipWaiting');
+  console.log('=> New version activated.');
+  // }
+}
+
 const swInit = () => {
   if ('serviceWorker' in navigator) {
-    function listenForWaitingServiceWorker(reg, callback) {
-      function awaitStateChange() {
-        reg.installing.addEventListener('statechange', function () {
-          if (this.state === 'installed') callback(reg);
-        });
-      }
-      if (!reg) return;
-      if (reg.waiting) return callback(reg);
-      if (reg.installing) awaitStateChange();
-      reg.addEventListener('updatefound', awaitStateChange);
-    }
-
+    
     // registering service worker
     navigator.serviceWorker.register('/locations/sw.js').then(
       function (registration) {
@@ -32,16 +43,6 @@ const swInit = () => {
             window.location.reload();
           }
         );
-
-        function promptUserToRefresh(registration) {
-          // this is just an example
-          // don't use window.confirm in real life; it's terrible
-          // if (window.confirm('New version available! OK to refresh?')) {
-          console.log('=> New version available!');
-          registration.waiting.postMessage('skipWaiting');
-          console.log('=> New version activated.');
-          // }
-        }
 
         listenForWaitingServiceWorker(registration, promptUserToRefresh);
       },

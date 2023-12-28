@@ -1,7 +1,21 @@
 const version = 1;
-// let staticName = `staticCache-${version}`;
-const blogApiCacheName = `blogApi-${version}`;
+const blogApiCacheName = `api-cache-${version}`;
 const swHeaderName = 'x-sw-api-fetched-on';
+
+// List of url which you want to be cached
+const reqUrls = ['/locations/v1/search']
+
+const originArray = [
+  'http://localhost:3000',
+  'https://www.usbank.com'
+]
+
+/**
+ * @description : method to check if req origin is part of whitelisted origins
+ * @param {*} origin : string
+ * @returns : Boolean
+ */
+const checkOrigin = (origin) => originArray.includes(origin);
 
 /**
  * Check if cached API data is still valid
@@ -11,13 +25,16 @@ const swHeaderName = 'x-sw-api-fetched-on';
 const isValid = function (response) {
   if (!response) return false;
   var fetched = response.headers.get(swHeaderName);
-  if (
-    fetched &&
-    parseFloat(fetched) + 1000 * 60 * 60 * 2 > new Date().getTime()
-  )
-    return true;
-  return false;
+  // Checking response is valid for 2 hours only
+  return !!(fetch && parseFloat(fetched) + 1000 * 60 * 60 * 2 > new Date().getTime());
 };
+
+const inRequestUrl = (event) => {
+  const urlMatched = reqUrls.find((urlStr) => {
+    return event.request.url.includes(urlStr);
+  });
+  return urlMatched ?? false;
+}
 
 self.addEventListener('install', (ev) => {
   // service worker has been installed.
@@ -41,7 +58,7 @@ self.addEventListener('activate', (ev) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('/posts')) {
+  if (inRequestUrl(event)) {
     console.log(caches, `FETCH: request for: ${event.request.url}`);
 
     event.respondWith(
@@ -60,7 +77,7 @@ self.addEventListener('fetch', (event) => {
           // If there's a cached API and it's still valid, use it
           if (isValid(cacheRes)) {
             console.log(`VALID CACHED DATA ${event.request.url}`);
-            return cacheRes;
+            return Promise.resolve(cacheRes);
           }
 
           // Otherwise, cache missed and make a fresh API call
@@ -69,12 +86,20 @@ self.addEventListener('fetch', (event) => {
             console.log(`MAKING FRESH CALL ${event.request.url}`);
             console.log(`MAKING FRESH CALL RES => ${response}`);
             // Cache for offline access
-            var copy = response.clone();
+            const copy = response.clone();
             event.waitUntil(
               caches.open(blogApiCacheName).then(function (cache) {
-                var headers = new Headers(copy.headers);
+                const headers = new Headers(copy.headers);
                 headers.append(swHeaderName, new Date().getTime());
                 return copy.blob().then(function (body) {
+
+                  // skip caching of response if status code other then 200.
+                  // Skipping all error scenarios.
+                  if(response.status !== 200) {
+                    return;
+                  }
+
+                  // Storing cached data
                   return cache.put(
                     event.request,
                     new Response(body, {
@@ -97,7 +122,10 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('message', (messageEvent) => {
-  //message from web page ev.data.
-  //Extendable Event
+  if(!checkOrigin(messageEvent.origin)) {
+    return;
+  }
+  
+  // return skip waiting to refresh cache
   if (messageEvent.data === 'skipWaiting') return skipWaiting();
 });
